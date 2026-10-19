@@ -1,0 +1,325 @@
+import type { Book, LibraryState } from "@/lib/types";
+
+const books: Book[] = [
+  {
+    id: "b-001",
+    title: "The Midnight Library",
+    author: "Matt Haig",
+    category: "Fiction",
+    isbn: "9780525559474",
+    description:
+      "Between life and death there is a library, and within that library, the shelves go on forever.",
+    condition: "Good",
+    price: 72,
+    quantity: 8,
+    cover: "https://covers.openlibrary.org/b/isbn/9780525559474-L.jpg",
+    forSale: true,
+  },
+  {
+    id: "b-002",
+    title: "Atomic Habits",
+    author: "James Clear",
+    category: "Personal growth",
+    isbn: "9780735211292",
+    description:
+      "A practical guide to building good habits, breaking bad ones, and getting 1% better every day.",
+    condition: "New",
+    price: 85,
+    quantity: 5,
+    cover: "https://covers.openlibrary.org/b/isbn/9780735211292-L.jpg",
+    forSale: true,
+  },
+  {
+    id: "b-003",
+    title: "A Little Life",
+    author: "Hanya Yanagihara",
+    category: "Fiction",
+    isbn: "9780804172707",
+    description:
+      "Four college friends move to New York and discover the ways that ambition and love can remake a life.",
+    condition: "Fair",
+    price: 95,
+    quantity: 3,
+    cover: "https://covers.openlibrary.org/b/isbn/9780804172707-L.jpg",
+    forSale: true,
+  },
+  {
+    id: "b-004",
+    title: "The Creative Act",
+    author: "Rick Rubin",
+    category: "Art & design",
+    isbn: "9780593652886",
+    description:
+      "A generous course of study that illuminates the path of the artist as a road we can all follow.",
+    condition: "New",
+    price: 110,
+    quantity: 6,
+    cover: "https://covers.openlibrary.org/b/isbn/9780593652886-L.jpg",
+    forSale: true,
+  },
+  {
+    id: "b-005",
+    title: "The Book of Joy",
+    author: "Dalai Lama & Desmond Tutu",
+    category: "Mindfulness",
+    isbn: "9780399185045",
+    description:
+      "Two spiritual masters share their wisdom for living with joy even in the face of adversity.",
+    condition: "Good",
+    price: 78,
+    quantity: 4,
+    cover: "https://covers.openlibrary.org/b/isbn/9780399185045-L.jpg",
+    forSale: true,
+  },
+  {
+    id: "b-006",
+    title: "The Alchemist",
+    author: "Paulo Coelho",
+    category: "Fiction",
+    isbn: "9780062315007",
+    description:
+      "A shepherd boy travels from Spain to Egypt in search of treasure and finds a deeper kind of fortune.",
+    condition: "Good",
+    price: 60,
+    quantity: 2,
+    cover: "https://covers.openlibrary.org/b/isbn/9780062315007-L.jpg",
+    forSale: true,
+  },
+  {
+    id: "b-007",
+    title: "Thinking, Fast and Slow",
+    author: "Daniel Kahneman",
+    category: "Psychology",
+    isbn: "9780374533557",
+    description:
+      "A tour of the two systems that drive the way we think, and how we can make better decisions.",
+    condition: "Fair",
+    price: 90,
+    quantity: 7,
+    cover: "https://covers.openlibrary.org/b/isbn/9780374533557-L.jpg",
+    forSale: false,
+  },
+  {
+    id: "b-008",
+    title: "Ikigai",
+    author: "Héctor García & Francesc Miralles",
+    category: "Personal growth",
+    isbn: "9780143130727",
+    description:
+      "The Japanese secret to a long and happy life, explored through the people of Okinawa.",
+    condition: "New",
+    price: 68,
+    quantity: 1,
+    cover: "https://covers.openlibrary.org/b/isbn/9780143130727-L.jpg",
+    forSale: true,
+  },
+];
+
+const now = Date.now();
+const daysAgo = (days: number) =>
+  new Date(now - days * 86_400_000).toISOString();
+const daysFromNow = (days: number) =>
+  new Date(now + days * 86_400_000).toISOString();
+
+export const initialLibraryState: LibraryState = {
+  books,
+  members: [
+    {
+      id: "m-001",
+      name: "Lina Khalil",
+      email: "lina@example.com",
+      phone: "+970 599 123 456",
+      membershipStatus: "Active",
+      membershipExpiresAt: daysFromNow(120),
+      unpaidFines: 0,
+    },
+    {
+      id: "m-002",
+      name: "Omar Nasser",
+      email: "omar@example.com",
+      phone: "+970 598 234 567",
+      membershipStatus: "Active",
+      membershipExpiresAt: daysFromNow(45),
+      unpaidFines: 12,
+    },
+    {
+      id: "m-003",
+      name: "Maya Barghouti",
+      email: "maya@example.com",
+      phone: "+970 597 345 678",
+      membershipStatus: "Active",
+      membershipExpiresAt: daysFromNow(8),
+      unpaidFines: 0,
+    },
+    {
+      id: "m-004",
+      name: "Sami Darwish",
+      email: "sami@example.com",
+      phone: "+970 596 456 789",
+      membershipStatus: "Expired",
+      membershipExpiresAt: daysAgo(4),
+      unpaidFines: 0,
+    },
+  ],
+  loans: [
+    {
+      id: "LN-1048",
+      bookId: "b-002",
+      memberId: "m-001",
+      issuedAt: daysAgo(9),
+      dueAt: daysFromNow(5),
+      renewals: 0,
+      status: "Active",
+    },
+    {
+      id: "LN-1047",
+      bookId: "b-004",
+      memberId: "m-003",
+      issuedAt: daysAgo(15),
+      dueAt: daysAgo(1),
+      renewals: 0,
+      status: "Active",
+    },
+    {
+      id: "LN-1046",
+      bookId: "b-006",
+      memberId: "m-002",
+      issuedAt: daysAgo(20),
+      dueAt: daysAgo(6),
+      renewals: 0,
+      status: "Active",
+    },
+  ],
+  requests: [
+    {
+      id: "BR-204",
+      bookId: "b-005",
+      memberId: "m-003",
+      requestedAt: daysAgo(0),
+      status: "Pending",
+    },
+    {
+      id: "BR-203",
+      bookId: "b-001",
+      memberId: "m-001",
+      requestedAt: daysAgo(1),
+      status: "Pending",
+    },
+  ],
+  reservations: [
+    {
+      id: "RS-091",
+      bookId: "b-002",
+      memberId: "m-003",
+      createdAt: daysAgo(1),
+      status: "Queued",
+    },
+    {
+      id: "RS-090",
+      bookId: "b-006",
+      memberId: "m-001",
+      createdAt: daysAgo(2),
+      status: "Queued",
+    },
+  ],
+  movements: [
+    {
+      id: "ST-409",
+      bookId: "b-001",
+      type: "Stock received",
+      before: 6,
+      after: 8,
+      reason: "Supplier delivery",
+      employee: "Noor A.",
+      createdAt: daysAgo(0),
+    },
+    {
+      id: "ST-408",
+      bookId: "b-004",
+      type: "Book issued",
+      before: 7,
+      after: 6,
+      reason: "Loan LN-1047",
+      employee: "Noor A.",
+      createdAt: daysAgo(1),
+    },
+  ],
+  notices: [
+    {
+      id: "N-301",
+      message: "The Creative Act is overdue by 1 day.",
+      createdAt: daysAgo(0),
+      read: false,
+    },
+    {
+      id: "N-300",
+      message: "Ikigai is running low in stock (1 copy left).",
+      createdAt: daysAgo(1),
+      read: false,
+    },
+    {
+      id: "N-299",
+      message: "Maya Barghouti's membership expires in 8 days.",
+      createdAt: daysAgo(1),
+      read: true,
+    },
+  ],
+  renewals: [],
+  sales: [],
+  suppliers: [],
+  purchaseOrders: [],
+  invoices: [],
+  reviews: [],
+  auditLog: [],
+  categories: [
+    "Fiction",
+    "Personal growth",
+    "Art & design",
+    "Mindfulness",
+    "Psychology",
+  ],
+  settings: {
+    loanDays: 14,
+    finePerDay: 1,
+    fineCapAtBookPrice: true,
+    membershipDays: 365,
+    membershipFee: 0,
+    reservationHoldDays: 3,
+    maxLoans: 3,
+    maxReservations: 3,
+    lowStockThreshold: 3,
+    staffTimeoutMinutes: 15,
+    customerTimeoutMinutes: 30,
+    branchAddress: "",
+    contactEmail: "",
+    contactPhone: "",
+    openingHours: "",
+  },
+};
+
+export function normalizeLibraryState(state: LibraryState): LibraryState {
+  return {
+    ...initialLibraryState,
+    ...state,
+    books: state.books.map((book) => book.stockByLocation
+      ? book
+      : {
+          ...book,
+          stockByLocation: book.location === "Warehouse"
+            ? { Warehouse: book.quantity, "Library floor": 0 }
+            : { Warehouse: 0, "Library floor": book.quantity },
+        }),
+    renewals: state.renewals ?? [],
+    sales: (state.sales ?? []).map((sale) => ({
+      ...sale,
+      paymentStatus: sale.paymentStatus ?? "Paid",
+    })),
+    suppliers: state.suppliers ?? [],
+    purchaseOrders: state.purchaseOrders ?? [],
+    invoices: state.invoices ?? [],
+    reviews: state.reviews ?? [],
+    auditLog: state.auditLog ?? [],
+    categories: state.categories ?? initialLibraryState.categories,
+    settings: { ...initialLibraryState.settings!, ...state.settings },
+  };
+}

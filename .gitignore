@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+backups/
+.vercel/
+*.sql.enc
+*.dump
+*.bak
+*.pem
+*.key
+.env
+.env.*
+!.env.example
