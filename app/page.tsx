@@ -1963,9 +1963,9 @@ export default function Home() {
           <div>
             <strong>Database-backed application</strong>
             <p>
-              Production data is stored in MySQL.               Password-reset email and real payment processing need external
-              provider configuration. Scheduled off-site backups and disaster
-              recovery depend on the production hosting setup.
+              Production data is stored in Supabase PostgreSQL. Password-reset
+              email needs provider configuration. Scheduled off-site backups
+              and disaster recovery depend on the production hosting setup.
             </p>
           </div>
         </section>

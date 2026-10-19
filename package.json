@@ -11,7 +11,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "db:backup": "node scripts/backup-mysql.mjs"
+    "db:backup": "node scripts/backup-postgres.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

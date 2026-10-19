@@ -1,27 +1,30 @@
-CREATE TABLE `User` (
-    `id` VARCHAR(191) NOT NULL,
-    `name` VARCHAR(191) NOT NULL,
-    `email` VARCHAR(191) NOT NULL,
-    `phone` VARCHAR(191) NOT NULL,
-    `passwordHash` VARCHAR(191) NOT NULL,
-    `role` ENUM('Manager', 'Receptionist', 'Warehouseman', 'Customer') NOT NULL DEFAULT 'Customer',
-    `memberId` VARCHAR(191) NULL,
-    `permissions` JSON NULL,
-    `active` BOOLEAN NOT NULL DEFAULT true,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
+CREATE TYPE "UserRole" AS ENUM ('Manager', 'Receptionist', 'Warehouseman', 'Customer');
 
-    UNIQUE INDEX `User_email_key`(`email`),
-    UNIQUE INDEX `User_memberId_key`(`memberId`),
-    INDEX `User_role_active_idx`(`role`, `active`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "passwordHash" TEXT NOT NULL,
+    "role" "UserRole" NOT NULL DEFAULT 'Customer',
+    "memberId" TEXT,
+    "permissions" JSONB,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE `LibrarySnapshot` (
-    `id` VARCHAR(191) NOT NULL DEFAULT 'primary',
-    `revision` INTEGER NOT NULL DEFAULT 0,
-    `state` JSON NOT NULL,
-    `updatedAt` DATETIME(3) NOT NULL,
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
 
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE "LibrarySnapshot" (
+    "id" TEXT NOT NULL DEFAULT 'primary',
+    "revision" INTEGER NOT NULL DEFAULT 0,
+    "state" JSONB NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "LibrarySnapshot_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+CREATE UNIQUE INDEX "User_memberId_key" ON "User"("memberId");
+CREATE INDEX "User_role_active_idx" ON "User"("role", "active");
