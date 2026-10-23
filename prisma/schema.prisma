@@ -36,6 +36,19 @@ model User {
 
   @@index([role, active])
   authTokens   AuthToken[]
+  authSessions AuthSession[]
+}
+
+model AuthSession {
+  id             String   @id
+  userId         String
+  lastActivityAt DateTime @default(now())
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
 }
 
 model AuthToken {

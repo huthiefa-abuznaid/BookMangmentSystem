@@ -164,6 +164,8 @@ export default function Home() {
   const [auditTo, setAuditTo] = useState("");
   const [sessionWarning, setSessionWarning] = useState(false);
   const [staffUsers, setStaffUsers] = useState<PrototypeStaff[]>([]);
+  const [newStaffRole, setNewStaffRole] =
+    useState<Exclude<Role, "Customer">>("Receptionist");
   const [staffError, setStaffError] = useState("");
   const [returnConditions, setReturnConditions] = useState<Record<string, Book["condition"]>>({});
 
@@ -276,16 +278,46 @@ export default function Home() {
       role === "Customer"
         ? library?.settings?.customerTimeoutMinutes ?? 30
         : library?.settings?.staffTimeoutMinutes ?? 15;
+    const timeoutMs = timeoutMinutes * 60_000;
+    const activitySyncIntervalMs = Math.min(60_000, timeoutMs / 4);
+    let lastActivitySync = 0;
+    let activitySyncInProgress = false;
+    let active = true;
     const resetTimeout = () => {
       window.clearTimeout(warningTimer);
       window.clearTimeout(logoutTimer);
       setSessionWarning(false);
-      const timeoutMs = timeoutMinutes * 60_000;
       warningTimer = window.setTimeout(
         () => setSessionWarning(true),
         Math.max(0, timeoutMs - 60_000),
       );
       logoutTimer = window.setTimeout(() => void signOut(), timeoutMs);
+
+      if (
+        activitySyncInProgress ||
+        Date.now() - lastActivitySync < activitySyncIntervalMs
+      ) return;
+
+      lastActivitySync = Date.now();
+      activitySyncInProgress = true;
+      void fetch("/api/auth/session", { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Could not verify the active session.");
+          const result = await response.json();
+          if (active && !result.user) await signOut();
+        })
+        .catch((syncError: unknown) => {
+          if (active) {
+            setError(
+              syncError instanceof Error
+                ? syncError.message
+                : "Could not verify the active session.",
+            );
+          }
+        })
+        .finally(() => {
+          activitySyncInProgress = false;
+        });
     };
     const events = ["pointerdown", "keydown", "touchstart", "scroll"];
     events.forEach((event) =>
@@ -293,6 +325,7 @@ export default function Home() {
     );
     resetTimeout();
     return () => {
+      active = false;
       events.forEach((event) => window.removeEventListener(event, resetTimeout));
       window.clearTimeout(warningTimer);
       window.clearTimeout(logoutTimer);
@@ -525,6 +558,18 @@ export default function Home() {
   const pendingRequests = data.requests.filter(
     (request) => request.status === "Pending",
   );
+  const pendingMemberships = data.members.filter(
+    (member) => member.membershipStatus === "Pending",
+  );
+  const activeReservations = data.reservations.filter((reservation) =>
+    ["Queued", "Ready for pickup"].includes(reservation.status),
+  );
+  const readyReservations = activeReservations.filter(
+    (reservation) => reservation.status === "Ready for pickup",
+  );
+  const suggestedPurchaseOrders = (data.purchaseOrders ?? []).filter(
+    (order) => order.status === "Suggested",
+  );
   const lowStockBooks = data.books.filter(
     (book) =>
       !book.deletedAt &&
@@ -538,7 +583,24 @@ export default function Home() {
         ).length <=
         (book.stockThreshold ?? data.settings?.lowStockThreshold ?? 3),
   );
-  const unreadNotices = data.notices.filter((notice) => !notice.read).length;
+  const visibleNotices =
+    role === "Customer"
+      ? data.notices.filter((notice) => notice.memberId === customerId)
+      : data.notices;
+  const unreadNotices = visibleNotices.filter((notice) => !notice.read).length;
+  const recentLoans = [...activeLoans].sort(
+    (first, second) => Date.parse(second.issuedAt) - Date.parse(first.issuedAt),
+  );
+  const recentNotices = [...data.notices].sort(
+    (first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt),
+  );
+  const recentVisibleNotices =
+    role === "Customer"
+      ? [...visibleNotices].sort(
+          (first, second) =>
+            Date.parse(second.createdAt) - Date.parse(first.createdAt),
+        )
+      : recentNotices;
   const customerLoans = activeLoans.filter(
     (loan) => loan.memberId === customerId,
   );
@@ -576,6 +638,13 @@ export default function Home() {
 
   function renderOverview() {
     const customerRole = role === "Customer";
+    const currentHour = new Date().getHours();
+    const timeGreeting =
+      currentHour < 12
+        ? "Good morning"
+        : currentHour < 18
+          ? "Good afternoon"
+          : "Good evening";
     const statCards = customerRole
       ? [
           {
@@ -613,7 +682,7 @@ export default function Home() {
               label: "Low-stock titles",
               value: lowStockBooks.length,
               icon: "⚑",
-              note: "At or below 3 copies",
+              note: "At or below configured threshold",
             },
             {
               label: "Movements today",
@@ -649,7 +718,7 @@ export default function Home() {
               label: "Low-stock titles",
               value: lowStockBooks.length,
               icon: "⚑",
-              note: "At or below 3 copies",
+              note: "At or below configured threshold",
             },
           ];
 
@@ -667,7 +736,7 @@ export default function Home() {
             <h2>
               {customerRole
                 ? `Welcome back, ${greeting}.`
-                : `Good morning, ${greeting}.`}
+                : `${timeGreeting}, ${greeting}.`}
             </h2>
             <p>
               {customerRole
@@ -710,6 +779,54 @@ export default function Home() {
             </article>
           ))}
         </section>
+
+        {role === "Manager" && (
+          <section className="panel manager-actions-panel">
+            <div className="panel-heading">
+              <div>
+                <div className="eyebrow">Manager workspace</div>
+                <h3>Approvals and team</h3>
+              </div>
+            </div>
+            <div className="manager-action-grid">
+              <button
+                className="manager-action"
+                onClick={() => goTo("Customers")}
+              >
+                <strong>{pendingMemberships.length}</strong>
+                <span>Memberships awaiting approval</span>
+                <small>Review customer registrations →</small>
+              </button>
+              <button
+                className="manager-action"
+                onClick={() => goTo("Suppliers")}
+              >
+                <strong>{suggestedPurchaseOrders.length}</strong>
+                <span>Purchase orders awaiting approval</span>
+                <small>Review purchase suggestions →</small>
+              </button>
+              <button
+                className="manager-action"
+                onClick={() => goTo("Reservations")}
+              >
+                <strong>{activeReservations.length}</strong>
+                <span>Active reservations</span>
+                <small>{readyReservations.length} ready for pickup · Review queue →</small>
+              </button>
+              <button
+                className="manager-action"
+                onClick={() => {
+                  setNewStaffRole("Warehouseman");
+                  goTo("Staff");
+                }}
+              >
+                <strong aria-hidden="true">+</strong>
+                <span>Create warehouse account</span>
+                <small>Manager-created staff access →</small>
+              </button>
+            </div>
+          </section>
+        )}
 
         <div className="content-grid">
           <section className="panel">
@@ -772,7 +889,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activeLoans.slice(0, 5).map((loan) => {
+                    {recentLoans.slice(0, 5).map((loan) => {
                       const member = data.members.find(
                         (item) => item.id === loan.memberId,
                       );
@@ -811,9 +928,9 @@ export default function Home() {
                 {data.notices.filter((item) => !item.read).length}
               </span>
             </div>
-            {data.notices.length ? (
+            {visibleNotices.length ? (
               <div className="alert-list">
-                {data.notices.slice(0, 4).map((notice) => (
+                {recentVisibleNotices.slice(0, 4).map((notice) => (
                   <div className="alert-row" key={notice.id}>
                     <span
                       className={`alert-dot ${notice.read ? "read" : ""}`}
@@ -842,11 +959,11 @@ export default function Home() {
         <section className="panel featured-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">Picked for you</div>
+              <div className="eyebrow">{customerRole ? "Picked for you" : "Explore the collection"}</div>
               <h3>
                 {customerRole
                   ? "Find your next favorite"
-                  : "Popular in the catalog"}
+                  : "Books in the catalog"}
               </h3>
             </div>
             <button className="text-button" onClick={() => goTo("Catalog")}>
@@ -1414,6 +1531,14 @@ export default function Home() {
             <div className="eyebrow">Queue in request order</div>
             <h3>Reservations</h3>
           </div>
+          {role === "Customer" && (
+            <button
+              className="button button-primary"
+              onClick={() => goTo("Catalog")}
+            >
+              Find a book to reserve <span aria-hidden="true">→</span>
+            </button>
+          )}
           <span className="subtle-count">
             {
               reservations.filter((item) =>
@@ -1437,13 +1562,30 @@ export default function Home() {
                 </tr>
               </thead>
               <tbody>
-                {reservations.map((reservation, index) => {
+                {reservations.map((reservation) => {
                   const member = data.members.find(
                     (item) => item.id === reservation.memberId,
                   );
                   const book = data.books.find(
                     (item) => item.id === reservation.bookId,
                   );
+                  const queuePosition =
+                    role !== "Customer" && reservation.status === "Queued"
+                      ? data.reservations
+                          .filter(
+                            (item) =>
+                              item.bookId === reservation.bookId &&
+                              item.status === "Queued" &&
+                              Date.parse(item.createdAt) <=
+                                Date.parse(reservation.createdAt),
+                          )
+                          .sort(
+                            (first, second) =>
+                              Date.parse(first.createdAt) -
+                              Date.parse(second.createdAt),
+                          )
+                          .findIndex((item) => item.id === reservation.id) + 1
+                      : null;
                   const expired =
                     reservation.holdUntil &&
                     Date.parse(reservation.holdUntil) < Date.now() &&
@@ -1454,9 +1596,11 @@ export default function Home() {
                       <td>{member?.name}</td>
                       <td>
                         {book?.title}
-                        <small className="table-subtitle">
-                          Queue position {index + 1}
-                        </small>
+                        {queuePosition !== null && (
+                          <small className="table-subtitle">
+                            Queue position {queuePosition}
+                          </small>
+                        )}
                       </td>
                       <td>{dateLabel(reservation.createdAt)}</td>
                       <td>
@@ -2057,6 +2201,10 @@ export default function Home() {
   function renderSales() {
     const memberId = role === "Customer" ? customerId : selectedCustomerId;
     const customerSales = (data.sales ?? []).filter((sale) => role !== "Customer" || sale.memberId === customerId);
+    const selectedSaleBook = data.books.find((book) => book.id === saleBookId);
+    const selectedSaleBookAvailable = selectedSaleBook
+      ? bookAvailability(selectedSaleBook).count
+      : 0;
     const cartTotal = cart.reduce((sum, item) => {
       const book = data.books.find((entry) => entry.id === item.bookId);
       return sum + (book?.price ?? 0) * item.quantity;
@@ -2067,11 +2215,17 @@ export default function Home() {
           <div className="panel-heading"><div><div className="eyebrow">{role === "Customer" ? "Library pickup only" : "Cash register"}</div><h3>{role === "Customer" ? "Bookshop" : "Record a sale"}</h3></div></div>
           {role !== "Customer" && <label>Customer<select value={selectedCustomerId} onChange={(event) => setSelectedCustomerId(event.target.value)}><option value="">Select customer</option>{data.members.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.email}</option>)}</select></label>}
           <div className="filter-panel">
-            <label>Book<select value={saleBookId} onChange={(event) => setSaleBookId(event.target.value)}><option value="">Select for-sale book</option>{data.books.filter((book) => !book.deletedAt && book.forSale && book.price > 0 && book.quantity > 0).map((book) => <option key={book.id} value={book.id}>{book.title} · {money(book.price)} · {book.quantity} in stock</option>)}</select></label>
-            <label>Quantity<input type="number" min="1" value={saleQuantity} onChange={(event) => setSaleQuantity(Number(event.target.value))} /></label>
-            <button className="button button-secondary" disabled={!saleBookId || saleQuantity < 1} onClick={() => {
+            <label>Book<select value={saleBookId} onChange={(event) => setSaleBookId(event.target.value)}><option value="">Select for-sale book</option>{data.books.filter((book) => !book.deletedAt && book.forSale && book.price > 0 && bookAvailability(book).count > 0).map((book) => <option key={book.id} value={book.id}>{book.title} · {money(book.price)} · {bookAvailability(book).count} available</option>)}</select></label>
+            <label>Quantity<input type="number" min="1" step="1" max={selectedSaleBookAvailable || undefined} value={saleQuantity} onChange={(event) => setSaleQuantity(Number(event.target.value))} /></label>
+            <button className="button button-secondary" disabled={!saleBookId || !Number.isInteger(saleQuantity) || saleQuantity < 1} onClick={() => {
               const book = data.books.find((item) => item.id === saleBookId);
-              if (!book || book.quantity < saleQuantity) { setError("There is not enough stock for this quantity."); return; }
+              const available = book ? bookAvailability(book).count : 0;
+              const cartQuantity = cart.find((item) => item.bookId === saleBookId)?.quantity ?? 0;
+              if (!book || !book.forSale || book.price <= 0 || cartQuantity + saleQuantity > available) {
+                setError("There is not enough available stock for this quantity.");
+                return;
+              }
+              setError("");
               setCart((items) => {
                 const existing = items.find((item) => item.bookId === saleBookId);
                 return existing
@@ -2217,7 +2371,7 @@ export default function Home() {
       active?: boolean;
       password?: string;
       permissions?: Record<string, boolean>;
-    }) {
+    }): Promise<boolean> {
       try {
         if (prototypeMode) {
           if (input.userId) await updatePrototypeStaff({ ...input, userId: input.userId });
@@ -2238,29 +2392,33 @@ export default function Home() {
         }
         setStaffError("");
         setToast(input.userId ? "Staff account updated." : "Staff account created.");
+        return true;
       } catch (saveError) {
         setStaffError(saveError instanceof Error ? saveError.message : "Could not save staff account.");
+        return false;
       }
     }
 
     return <div className="stacked-panels">
       <section className="panel">
         <div className="eyebrow">Staff administration</div><h3>Create staff account</h3>
-        <form className="filter-panel" onSubmit={(event) => {
-          event.preventDefault(); const form = new FormData(event.currentTarget);
-          void saveStaff({
+        <form className="filter-panel" onSubmit={async (event) => {
+          event.preventDefault();
+          const formElement = event.currentTarget;
+          const form = new FormData(formElement);
+          const saved = await saveStaff({
             name: String(form.get("name") ?? ""),
             email: String(form.get("email") ?? ""),
             phone: String(form.get("phone") ?? ""),
             role: String(form.get("role") ?? "Receptionist") as Exclude<Role, "Customer">,
             password: String(form.get("password") ?? ""),
           });
-          event.currentTarget.reset();
+          if (saved) formElement.reset();
         }}>
           <label>Full name<input name="name" required minLength={2} maxLength={100} /></label>
           <label>Email<input name="email" type="email" required maxLength={254} /></label>
           <label>Phone<input name="phone" required minLength={6} maxLength={30} /></label>
-          <label>Role<select name="role"><option>Receptionist</option><option>Warehouseman</option><option>Manager</option></select></label>
+          <label>Role<select name="role" defaultValue={newStaffRole}><option>Receptionist</option><option>Warehouseman</option><option>Manager</option></select></label>
           <label>Temporary password<input name="password" type="password" required minLength={12} maxLength={128} /></label>
           <button className="button button-primary">Create staff account</button>
         </form>
@@ -2432,7 +2590,7 @@ export default function Home() {
                       Mark all read
                     </button>
                   </div>
-                  {data.notices.slice(0, 5).map((notice) => (
+                  {recentVisibleNotices.slice(0, 5).map((notice) => (
                     <button
                       className={`popover-notice ${notice.read ? "is-read" : ""}`}
                       key={notice.id}
@@ -2828,7 +2986,10 @@ function AuthPage({
                 Email address
                 <input
                   type="email"
+                  name="email"
                   autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   maxLength={254}
@@ -2849,6 +3010,7 @@ function AuthPage({
                 <span className="auth-password-field">
                   <input
                     type={showPassword ? "text" : "password"}
+                    name="password"
                     autoComplete={
                       mode === "login" ? "current-password" : "new-password"
                     }
@@ -2865,6 +3027,7 @@ function AuthPage({
                     className="password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
                     aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? "Hide" : "Show"}
                   </button>

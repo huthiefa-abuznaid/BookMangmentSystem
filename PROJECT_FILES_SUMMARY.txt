@@ -1,0 +1,264 @@
+SHELF & SOUL - PROJECT FILES AND PURPOSE
+
+This document summarizes the project files currently present in the repository.
+It describes each file's purpose; it is not a copy of the source code or a
+database backup.
+
+PROJECT OVERVIEW
+
+Shelf & Soul is a Next.js, React, and TypeScript library-management and
+bookshop application. It provides a browser-based demonstration mode using
+Local Storage and a production-oriented API backed by Prisma and PostgreSQL
+hosted by Supabase. Supabase is used for the database, not Supabase Auth or
+Supabase Storage. Application sign-in uses password hashes and signed session
+cookies.
+
+The app covers a public catalog, accounts, role-specific workspaces, books,
+members, circulation, reservations, stock, suppliers, purchase orders, sales,
+fines, reports, audit history, and manager backup/restore operations.
+
+HOW TO RUN AND SET UP
+
+1. Install Node.js and npm, then run `npm install`.
+2. Run `npm run dev` to start the local development app. Next.js normally uses
+   http://localhost:3000; if that port is already occupied, it may select
+   another port.
+3. The development UI uses browser Local Storage sample data. It is for
+   demonstrations and should not be used for real customer data.
+4. To use the database-backed production API, configure a private `.env` file
+   using `.env.example` as a template. Set valid database URLs and a unique
+   AUTH_SECRET. Do not put credentials in Postman requests or browser code.
+5. For a new database, run `npm run db:generate`, `npm run db:migrate`, then
+   `npm run db:seed`. Set the bootstrap Manager environment variables before
+   seeding. Do not run migrations or seed against a database unless you intend
+   to change it.
+6. Use `npm run typecheck` for a TypeScript check, `npm run build` for a
+   production build, and `npm start` to serve a production build.
+7. Postman tests the application's HTTP API, not PostgreSQL directly. The app
+   needs a configured database for database-backed API routes.
+
+DATA AND SECURITY NOTES
+
+- `.env` contains private local configuration and secrets. Its values are
+  intentionally not copied or described in this summary.
+- The database credential was exposed in the earlier chat context. Rotate the
+  database password in Supabase and update the private local configuration.
+- Do not commit `.env`, publish database URLs, or expose secrets as
+  `NEXT_PUBLIC_` variables.
+- The browser prototype stores sample accounts and library data in that
+  browser's Local Storage. Clearing site data removes it.
+- The production database stores account records in relational tables. Most
+  library business data is currently stored in a JSON snapshot row.
+- Manager JSON exports contain library/member information and are not
+  encrypted. Restrict access to exported files.
+- The PostgreSQL backup script encrypts database dumps, but scheduling,
+  off-site storage, and restore testing must be configured by the operator.
+- The project does not include an online payment processor. Sales and fines
+  are recorded as cash/cash-on-pickup workflows.
+- Email reset requires a configured email service. Email verification,
+  normalized tables for all library data, live database verification, and
+  production backup/recovery setup are not complete by default.
+
+FILE-BY-FILE GUIDE
+
+ROOT CONFIGURATION AND DOCUMENTATION
+
+.env
+  Private local environment configuration for database connections,
+  authentication, email, and backups. Keep secret values private; this file is
+  excluded from Git.
+
+.env.example
+  Safe template showing environment variable names and placeholder values
+  needed for PostgreSQL, sessions, account seeding, password reset email, and
+  encrypted backups.
+
+.gitattributes
+  Git file handling settings, including treatment of binary PDF documents.
+
+.gitignore
+  Excludes dependencies, build output, local environment files, generated
+  artifacts, and backup files from version control.
+
+README.md
+  Main instructions for local development, Supabase/PostgreSQL configuration,
+  migrations, seeding, password recovery, encrypted backups, application scope,
+  and known limitations.
+
+PROJECT_REQUIREMENTS_SUMMARY.md
+  Existing local requirements brief describing intended roles, rules,
+  workflows, accessibility/performance goals, and gaps between the requirements
+  and the current implementation. It is a separate requirements note.
+
+PROJECT_FILES_SUMMARY.txt
+  This file: a human-readable guide to the project files and their roles.
+
+Shelf_and_Soul_File_Inventory.pdf
+  PDF inventory describing project files and data-sensitivity notes. It is
+  documentation, not a backup of application records.
+
+Shelf_and_Soul_Project_Report.pdf
+  PDF project-status report covering implemented features, architecture,
+  completed checks, and work still required for production.
+
+Shelf_and_Soul_Technical_Report.pdf
+  PDF technical report describing the PostgreSQL/Supabase architecture,
+  workflows, security boundaries, validation, and deployment tasks.
+
+package.json
+  Project metadata, npm scripts, runtime/development dependencies, and Prisma
+  seed command. Important scripts include dev, build, start, typecheck,
+  db:generate, db:migrate, db:seed, and db:backup.
+
+package-lock.json
+  Locks exact npm dependency versions for reproducible installs.
+
+next.config.ts
+  Next.js framework configuration. It currently uses the default configuration.
+
+next-env.d.ts
+  Next.js generated TypeScript declarations. Normally maintained by Next.js.
+
+tsconfig.json
+  TypeScript compiler settings, strict type checking, JSX handling, and the
+  `@/*` project-root import alias.
+
+tsconfig.tsbuildinfo
+  Generated TypeScript incremental-build cache; not application source.
+
+APPLICATION UI
+
+app/layout.tsx
+  Root HTML layout and page metadata, and imports the global stylesheet.
+
+app/page.tsx
+  Main client-side application. Contains the sign-in/registration and visitor
+  experience, role-based navigation and dashboards, and library workflows such
+  as catalog, circulation, reservations, inventory, customers, sales,
+  suppliers, reports, audit, profile, staff, and settings.
+
+app/globals.css
+  Global design tokens, responsive layout, component styles, focus states, and
+  print/presentation rules.
+
+HTTP API ROUTES
+
+app/api/public/catalog/route.ts
+  GET /api/public/catalog - returns public book availability and configured
+  branch contact details.
+
+app/api/auth/register/route.ts
+  POST /api/auth/register - validates and creates a customer account and
+  membership record, then signs the new user in with a session cookie.
+
+app/api/auth/login/route.ts
+  POST /api/auth/login - verifies an active account password and issues a
+  signed session cookie.
+
+app/api/auth/logout/route.ts
+  POST /api/auth/logout - clears the session cookie.
+
+app/api/auth/session/route.ts
+  GET /api/auth/session - checks the session against the current active user
+  account and reports the signed-in user, if any.
+
+app/api/auth/password-reset/request/route.ts
+  POST /api/auth/password-reset/request - validates an email and, when the
+  email service is configured, sends a time-limited password reset link.
+
+app/api/auth/password-reset/complete/route.ts
+  POST /api/auth/password-reset/complete - validates a one-time reset token,
+  changes the password, and invalidates previous sessions.
+
+app/api/library/route.ts
+  GET /api/library - returns library state filtered for the signed-in user.
+  POST /api/library - validates and authorizes library actions, applies business
+  rules, then saves the updated library snapshot.
+
+app/api/staff/route.ts
+  GET /api/staff - lists staff accounts for Managers.
+  POST /api/staff - creates a staff account for Managers.
+  PATCH /api/staff - updates a staff account for Managers. Staff changes are
+  recorded in audit history.
+
+app/api/admin/backup/route.ts
+  GET /api/admin/backup - exports the library JSON snapshot for a Manager.
+  POST /api/admin/backup - validates and restores a snapshot after an explicit
+  confirmation. It does not change user accounts/passwords.
+
+SHARED LIBRARIES
+
+lib/types.ts
+  Shared TypeScript models and unions for roles, books, members, loans,
+  reservations, sales, stock, settings, audits, and library actions.
+
+lib/auth-validation.ts
+  Shared Zod validation rules for passwords, login, and registration.
+
+lib/api-auth.ts
+  Resolves the current signed-in, active database user for protected API routes.
+
+lib/session.ts
+  Creates and verifies signed session tokens and defines the HTTP-only session
+  cookie settings. Requires AUTH_SECRET from the environment.
+
+lib/prisma.ts
+  Creates and reuses the Prisma Client used to access the PostgreSQL database.
+
+lib/demo-data.ts
+  Provides sample library records and default settings for the prototype and
+  database seed, and normalizes older or incomplete library snapshots.
+
+lib/library-service.ts
+  Central library business logic for borrowing, returns, reservations,
+  membership, stock, purchasing, sales, fines, reviews, permissions, and audit
+  history. Used by the UI prototype and production API.
+
+lib/prototype-storage.ts
+  Browser-only prototype persistence and account workflows. Stores prototype
+  library data, accounts, sessions, and reset state in Local Storage; handles
+  prototype staff and library actions.
+
+DATABASE
+
+prisma/schema.prisma
+  Prisma schema for PostgreSQL. Defines User, AuthToken, and LibrarySnapshot
+  models and the account/token enums. Library business data is currently
+  primarily represented by a JSON snapshot.
+
+prisma/seed.ts
+  Initializes the first library snapshot and Manager account. Optional demo
+  staff/customer accounts can be added using an environment password.
+
+prisma/migrations/migration_lock.toml
+  Records PostgreSQL as the Prisma migration provider.
+
+prisma/migrations/20261019170000_initial/migration.sql
+  Creates the initial User and LibrarySnapshot database tables, enum, and
+  indexes.
+
+prisma/migrations/20261019225000_auth_recovery/migration.sql
+  Adds account authVersion and the AuthToken table/indexes for reset-token
+  workflows.
+
+BACKUP SCRIPT
+
+scripts/backup-postgres.mjs
+  Runs pg_dump, streams the output through AES-256-GCM encryption, writes an
+  encrypted backup file, and removes matching backups older than the configured
+  retention period. Requires backup environment configuration and PostgreSQL
+  command-line tools.
+
+GENERATED OR THIRD-PARTY CONTENT
+
+node_modules/
+  Installed third-party JavaScript packages; generated by npm install and not
+  maintained as project source.
+
+.next/
+  Next.js development/build output; generated automatically.
+
+.git/
+  Git repository metadata and history.
+
+These generated/dependency directories are not expanded file-by-file here.

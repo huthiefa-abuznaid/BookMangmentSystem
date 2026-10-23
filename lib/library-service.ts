@@ -1003,6 +1003,9 @@ export function executeLibraryAction(
       }
       const numericValues = Object.values(settings).filter((value): value is number => typeof value === "number");
       if (numericValues.some((value) => typeof value !== "number" || !Number.isFinite(value) || value < 0) || settings.loanDays < 1 || settings.membershipDays < 1 || settings.maxLoans < 1 || settings.maxReservations < 1 || settings.reservationHoldDays < 1 || settings.lowStockThreshold < 1 || settings.staffTimeoutMinutes < 1 || settings.customerTimeoutMinutes < 1) throw new Error("Enter valid positive policy values.");
+      if (settings.customerTimeoutMinutes <= settings.staffTimeoutMinutes) {
+        throw new Error("Customer session timeout must be longer than the staff session timeout.");
+      }
       next = { ...state, settings };
       return audit(next, actor, "Updated system settings", "Library policies", JSON.stringify(state.settings), JSON.stringify(settings));
     }
