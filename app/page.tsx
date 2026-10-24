@@ -38,9 +38,22 @@ type Page =
   | "Sales"
   | "Suppliers"
   | "Reports"
-  | "Audit"
+  | "Logs"
   | "Profile"
   | "Staff";
+
+type LogCategory = "Payments" | "Warehouse" | "Books" | "Rules" | "Users";
+
+interface ManagerLogRecord {
+  id: string;
+  category: LogCategory;
+  actor: string;
+  action: string;
+  item: string;
+  createdAt: string;
+  details: string;
+  source: "Audit log" | "Transaction record";
+}
 
 const navigation: { page: Page; icon: string; roles: Role[] }[] = [
   {
@@ -72,7 +85,7 @@ const navigation: { page: Page; icon: string; roles: Role[] }[] = [
   { page: "Sales", icon: "＄", roles: ["Manager", "Receptionist", "Customer"] },
   { page: "Suppliers", icon: "▣", roles: ["Manager", "Warehouseman"] },
   { page: "Reports", icon: "▥", roles: ["Manager", "Receptionist", "Warehouseman"] },
-  { page: "Audit", icon: "≡", roles: ["Manager"] },
+  { page: "Logs", icon: "≡", roles: ["Manager"] },
   { page: "Profile", icon: "♙", roles: ["Manager", "Receptionist", "Warehouseman", "Customer"] },
   { page: "Staff", icon: "♙", roles: ["Manager"] },
   { page: "Settings", icon: "⚙", roles: ["Manager"] },
@@ -104,6 +117,31 @@ function shortDate(date: string): string {
     day: "2-digit",
     month: "short",
   });
+}
+
+function logCategory(action: string, details = ""): LogCategory {
+  const text = `${action} ${details}`.toLowerCase();
+  if (/payment|fine|sale|cash|refund|paid/.test(text)) return "Payments";
+  if (/stock|warehouse|purchase order|supplier|invoice|transfer/.test(text)) {
+    return "Warehouse";
+  }
+  if (/setting|policy|permission|rule/.test(action.toLowerCase())) return "Rules";
+  if (/staff|account|profile|member|membership|user|register|password/.test(text)) {
+    return "Users";
+  }
+  return "Books";
+}
+
+function dateTimeLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown date";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function remainingDays(date: string): number {
@@ -162,6 +200,8 @@ export default function Home() {
   const [auditQuery, setAuditQuery] = useState("");
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
+  const [logCategoryFilter, setLogCategoryFilter] = useState<"All" | LogCategory>("All");
+  const [logsLimit, setLogsLimit] = useState(50);
   const [sessionWarning, setSessionWarning] = useState(false);
   const [staffUsers, setStaffUsers] = useState<PrototypeStaff[]>([]);
   const [newStaffRole, setNewStaffRole] =
@@ -243,7 +283,7 @@ export default function Home() {
   }, [search]);
 
   useEffect(() => {
-    if (page !== "Staff" || role !== "Manager") return;
+    if ((page !== "Staff" && page !== "Logs") || role !== "Manager") return;
     let cancelled = false;
     async function loadStaff() {
       try {
@@ -294,6 +334,7 @@ export default function Home() {
       logoutTimer = window.setTimeout(() => void signOut(), timeoutMs);
 
       if (
+        prototypeMode ||
         activitySyncInProgress ||
         Date.now() - lastActivitySync < activitySyncIntervalMs
       ) return;
@@ -823,6 +864,14 @@ export default function Home() {
                 <strong aria-hidden="true">+</strong>
                 <span>Create warehouse account</span>
                 <small>Manager-created staff access →</small>
+              </button>
+              <button
+                className="manager-action"
+                onClick={() => goTo("Logs")}
+              >
+                <strong>Open</strong>
+                <span>Transaction logs</span>
+                <small>Payments, books, warehouse, rules, and users →</small>
               </button>
             </div>
           </section>
@@ -2334,16 +2383,489 @@ export default function Home() {
       {filteredRows.length ? <div className="table-wrap"><table><thead><tr>{Object.keys(filteredRows[0]!).map((key) => <th key={key}>{key.toUpperCase()}</th>)}</tr></thead><tbody>{filteredRows.map((row, index) => <tr key={index}>{Object.values(row).map((value, cell) => <td key={cell}>{String(value)}</td>)}</tr>)}</tbody></table></div> : <EmptyState text="There are no records to include in this report." />}</section>;
   }
 
-  function renderAudit() {
+  function renderLogs() {
     const query = auditQuery.trim().toLowerCase();
-    const entries = (data.auditLog ?? []).filter((entry) => {
-      const time = Date.parse(entry.createdAt);
-      const matchesQuery = !query || `${entry.actor} ${entry.action} ${entry.item}`.toLowerCase().includes(query);
-      const matchesFrom = !auditFrom || time >= Date.parse(`${auditFrom}T00:00:00`);
-      const matchesTo = !auditTo || time <= Date.parse(`${auditTo}T23:59:59.999`);
-      return matchesQuery && matchesFrom && matchesTo;
+    const auditEntries = data.auditLog ?? [];
+    const records: ManagerLogRecord[] = auditEntries.map((entry) => {
+      const sale = (data.sales ?? []).find((item) => item.id === entry.item);
+      const saleDetails = sale
+        ? `${sale.items
+            .map(
+              (item) =>
+                `${data.books.find((book) => book.id === item.bookId)?.title ?? "Book"} × ${item.quantity}`,
+            )
+            .join(", ")} · ${sale.paymentMethod} · ${sale.paymentStatus ?? "Paid"} · ${money(sale.total)}`
+        : "";
+      const details =
+        sale && entry.action === "Recorded sale"
+          ? saleDetails
+          : [
+              entry.before ? `Before: ${entry.before}` : "",
+              entry.after ? `After: ${entry.after}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+      return {
+        id: `audit:${entry.id}`,
+        category: logCategory(entry.action, details),
+        actor: entry.actor,
+        action: entry.action,
+        item: entry.item,
+        createdAt: entry.createdAt,
+        details,
+        source: "Audit log",
+      };
     });
-    return <section className="panel"><div className="panel-heading"><div><div className="eyebrow">Read-only history</div><h3>Audit log</h3></div></div><div className="filter-panel"><label>Search<input type="search" value={auditQuery} onChange={(event) => setAuditQuery(event.target.value)} placeholder="User, action, or affected item" /></label><label>From<input type="date" value={auditFrom} max={auditTo || undefined} onChange={(event) => setAuditFrom(event.target.value)} /></label><label>To<input type="date" value={auditTo} min={auditFrom || undefined} onChange={(event) => setAuditTo(event.target.value)} /></label><button className="button button-secondary" onClick={() => { setAuditQuery(""); setAuditFrom(""); setAuditTo(""); }}>Clear filters</button></div>{entries.length ? <div className="table-wrap"><table><thead><tr><th>USER</th><th>ACTION</th><th>AFFECTED ITEM</th><th>DATE & TIME</th><th>BEFORE</th><th>AFTER</th></tr></thead><tbody>{entries.map((entry) => <tr key={entry.id}><td>{entry.actor}</td><td>{entry.action}</td><td>{entry.item}</td><td>{dateLabel(entry.createdAt)}</td><td>{entry.before ?? "—"}</td><td>{entry.after ?? "—"}</td></tr>)}</tbody></table></div> : <EmptyState text={query || auditFrom || auditTo ? "No audit events match these filters." : "No audit events have been recorded yet."} />}</section>;
+    for (const entry of auditEntries) {
+      if (entry.action !== "Updated staff account" || !entry.before || !entry.after) {
+        continue;
+      }
+      try {
+        const before: unknown = JSON.parse(entry.before);
+        const after: unknown = JSON.parse(entry.after);
+        if (
+          typeof before !== "object" ||
+          before === null ||
+          typeof after !== "object" ||
+          after === null ||
+          !("permissions" in before) ||
+          !("permissions" in after) ||
+          JSON.stringify(before.permissions) === JSON.stringify(after.permissions)
+        ) {
+          continue;
+        }
+        records.push({
+          id: `permissions:${entry.id}`,
+          category: "Rules",
+          actor: entry.actor,
+          action: "Staff permissions changed",
+          item: entry.item,
+          createdAt: entry.createdAt,
+          details: `Before: ${JSON.stringify(before.permissions)} · After: ${JSON.stringify(after.permissions)}`,
+          source: "Audit log",
+        });
+      } catch {
+        continue;
+      }
+    }
+    const hasAuditEvent = (
+      action: string,
+      item: string,
+      createdAt: string,
+      toleranceMs = 60_000,
+    ) =>
+      auditEntries.some(
+        (entry) =>
+          entry.action.toLowerCase().includes(action.toLowerCase()) &&
+          entry.item === item &&
+          Math.abs(Date.parse(entry.createdAt) - Date.parse(createdAt)) <=
+            toleranceMs,
+      );
+
+    for (const movement of data.movements) {
+      const book = data.books.find((item) => item.id === movement.bookId);
+      records.push({
+        id: `movement:${movement.id}`,
+        category: "Warehouse",
+        actor: movement.employee || "Not recorded",
+        action: movement.type,
+        item: book?.title ?? movement.bookId,
+        createdAt: movement.createdAt,
+        details: `${movement.before} → ${movement.after} copies · ${movement.reason}${movement.deletedAt ? " · Hidden movement" : ""}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const sale of data.sales ?? []) {
+      if (hasAuditEvent("Recorded sale", sale.id, sale.createdAt)) continue;
+      records.push({
+        id: `sale:${sale.id}`,
+        category: "Payments",
+        actor: "Not recorded",
+        action: "Sale transaction",
+        item: sale.id,
+        createdAt: sale.createdAt,
+        details: `${sale.items
+          .map(
+            (item) =>
+              `${data.books.find((book) => book.id === item.bookId)?.title ?? "Book"} × ${item.quantity}`,
+          )
+          .join(", ")} · ${sale.paymentMethod} · ${sale.paymentStatus ?? "Paid"} · ${money(sale.total)}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const loan of data.loans) {
+      const book = data.books.find((item) => item.id === loan.bookId);
+      const member = data.members.find((item) => item.id === loan.memberId);
+      if (!hasAuditEvent("issued book", loan.id, loan.issuedAt)) {
+        records.push({
+          id: `loan-issued:${loan.id}`,
+          category: "Books",
+          actor: "Not recorded",
+          action: "Book issued",
+          item: book?.title ?? loan.bookId,
+          createdAt: loan.issuedAt,
+          details: `Loan ${loan.id} · ${member?.name ?? "Customer"} · Due ${dateLabel(loan.dueAt)}`,
+          source: "Transaction record",
+        });
+      }
+      if (
+        loan.returnedAt &&
+        !hasAuditEvent("returned loan", loan.id, loan.returnedAt)
+      ) {
+        records.push({
+          id: `loan-returned:${loan.id}`,
+          category: "Books",
+          actor: "Not recorded",
+          action: "Book returned",
+          item: book?.title ?? loan.bookId,
+          createdAt: loan.returnedAt,
+          details: `Loan ${loan.id} · ${member?.name ?? "Customer"}`,
+          source: "Transaction record",
+        });
+      }
+    }
+
+    for (const request of data.requests) {
+      const book = data.books.find((item) => item.id === request.bookId);
+      const member = data.members.find((item) => item.id === request.memberId);
+      if (
+        hasAuditEvent(
+          "borrow request",
+          request.bookId,
+          request.requestedAt,
+          60_000,
+        )
+      ) {
+        continue;
+      }
+      records.push({
+        id: `request:${request.id}`,
+        category: "Books",
+        actor: "Not recorded",
+        action: `Borrow request ${request.status.toLowerCase()}`,
+        item: book?.title ?? request.bookId,
+        createdAt: request.requestedAt,
+        details: `Request ${request.id} · ${member?.name ?? "Customer"}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const reservation of data.reservations) {
+      const book = data.books.find((item) => item.id === reservation.bookId);
+      const member = data.members.find((item) => item.id === reservation.memberId);
+      if (
+        hasAuditEvent(
+          "created reservation",
+          reservation.bookId,
+          reservation.createdAt,
+          60_000,
+        )
+      ) {
+        continue;
+      }
+      records.push({
+        id: `reservation:${reservation.id}`,
+        category: "Books",
+        actor: "Not recorded",
+        action: `Reservation ${reservation.status.toLowerCase()}`,
+        item: book?.title ?? reservation.bookId,
+        createdAt: reservation.createdAt,
+        details: `Reservation ${reservation.id} · ${member?.name ?? "Customer"}${reservation.holdUntil ? ` · Hold until ${dateTimeLabel(reservation.holdUntil)}` : ""}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const renewal of data.renewals ?? []) {
+      if (hasAuditEvent("renewal", renewal.id, renewal.requestedAt)) continue;
+      const loan = data.loans.find((item) => item.id === renewal.loanId);
+      const book = loan && data.books.find((item) => item.id === loan.bookId);
+      records.push({
+        id: `renewal:${renewal.id}`,
+        category: "Books",
+        actor: "Not recorded",
+        action: `Renewal request ${renewal.status.toLowerCase()}`,
+        item: book?.title ?? renewal.loanId,
+        createdAt: renewal.requestedAt,
+        details: `Renewal ${renewal.id} · Loan ${renewal.loanId}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const order of data.purchaseOrders ?? []) {
+      if (hasAuditEvent("purchase order", order.id, order.createdAt)) continue;
+      records.push({
+        id: `purchase-order:${order.id}`,
+        category: "Warehouse",
+        actor: order.createdBy || "Not recorded",
+        action: `Purchase order ${order.status.toLowerCase()}`,
+        item: order.id,
+        createdAt: order.updatedAt || order.createdAt,
+        details: `${(data.suppliers ?? []).find((item) => item.id === order.supplierId)?.name ?? "Supplier"} · ${order.items.length} line items · ${money(order.total)}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const invoice of data.invoices ?? []) {
+      if (
+        hasAuditEvent(
+          "received purchase order",
+          invoice.purchaseOrderId,
+          invoice.receivedAt,
+        )
+      ) {
+        continue;
+      }
+      records.push({
+        id: `invoice:${invoice.id}`,
+        category: "Warehouse",
+        actor: invoice.receivedBy || "Not recorded",
+        action: "Supplier invoice recorded",
+        item: invoice.purchaseOrderId,
+        createdAt: invoice.receivedAt,
+        details: `Invoice ${invoice.invoiceNumber} · ${money(invoice.total)}`,
+        source: "Transaction record",
+      });
+    }
+
+    for (const staff of staffUsers) {
+      if (
+        auditEntries.some(
+          (entry) =>
+            entry.action === "Created staff account" && entry.item === staff.email,
+        )
+      ) {
+        continue;
+      }
+      records.push({
+        id: `staff:${staff.id}`,
+        category: "Users",
+        actor: "Not recorded",
+        action: "Staff account created",
+        item: staff.email,
+        createdAt: String(staff.createdAt),
+        details: `${staff.name} · ${staff.role} · ${staff.active ? "Active" : "Inactive"}`,
+        source: "Transaction record",
+      });
+    }
+
+    const allEntries = records
+      .filter((entry) => Number.isFinite(Date.parse(entry.createdAt)))
+      .sort(
+        (first, second) =>
+          Date.parse(second.createdAt) - Date.parse(first.createdAt),
+      );
+    const categoryCounts = allEntries.reduce<Record<LogCategory, number>>(
+      (counts, entry) => {
+        counts[entry.category] += 1;
+        return counts;
+      },
+      { Payments: 0, Warehouse: 0, Books: 0, Rules: 0, Users: 0 },
+    );
+    const filteredEntries = allEntries.filter((entry) => {
+      const matchesQuery =
+        !query ||
+        `${entry.actor} ${entry.action} ${entry.item} ${entry.details}`
+          .toLowerCase()
+          .includes(query);
+      const matchesFrom =
+        !auditFrom ||
+        Date.parse(entry.createdAt) >= Date.parse(`${auditFrom}T00:00:00`);
+      const matchesTo =
+        !auditTo ||
+        Date.parse(entry.createdAt) <= Date.parse(`${auditTo}T23:59:59.999`);
+      return (
+        matchesQuery &&
+        matchesFrom &&
+        matchesTo &&
+        (logCategoryFilter === "All" ||
+          entry.category === logCategoryFilter)
+      );
+    });
+    const shownEntries = filteredEntries.slice(0, logsLimit);
+    const logCategories: LogCategory[] = [
+      "Payments",
+      "Warehouse",
+      "Books",
+      "Rules",
+      "Users",
+    ];
+    const categoryOptions: ("All" | LogCategory)[] = [
+      "All",
+      ...logCategories,
+    ];
+
+    return (
+      <div className="stacked-panels">
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <div className="eyebrow">Manager-only · Read-only</div>
+              <h3>Transaction logs</h3>
+            </div>
+            <span className="subtle-count">
+              {filteredEntries.length} records
+            </span>
+          </div>
+          <div className="log-category-grid">
+            {logCategories.map((category) => (
+              <button
+                className={`log-category-card ${logCategoryFilter === category ? "selected" : ""}`}
+                key={category}
+                onClick={() => {
+                  setLogCategoryFilter(
+                    logCategoryFilter === category ? "All" : category,
+                  );
+                  setLogsLimit(50);
+                }}
+              >
+                <strong>{categoryCounts[category]}</strong>
+                <span>{category}</span>
+              </button>
+            ))}
+          </div>
+          <div className="filter-panel log-filters">
+            <label>
+              Search logs
+              <input
+                type="search"
+                value={auditQuery}
+                onChange={(event) => {
+                  setAuditQuery(event.target.value);
+                  setLogsLimit(50);
+                }}
+                placeholder="User, action, book, invoice, or amount"
+              />
+            </label>
+            <label>
+              Category
+              <select
+                value={logCategoryFilter}
+                onChange={(event) => {
+                  setLogCategoryFilter(
+                    event.target.value as "All" | LogCategory,
+                  );
+                  setLogsLimit(50);
+                }}
+              >
+                {categoryOptions.map((category) => (
+                  <option key={category}>{category}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              From
+              <input
+                type="date"
+                value={auditFrom}
+                max={auditTo || undefined}
+                onChange={(event) => {
+                  setAuditFrom(event.target.value);
+                  setLogsLimit(50);
+                }}
+              />
+            </label>
+            <label>
+              To
+              <input
+                type="date"
+                value={auditTo}
+                min={auditFrom || undefined}
+                onChange={(event) => {
+                  setAuditTo(event.target.value);
+                  setLogsLimit(50);
+                }}
+              />
+            </label>
+            <button
+              className="button button-secondary"
+              onClick={() => {
+                setAuditQuery("");
+                setAuditFrom("");
+                setAuditTo("");
+                setLogCategoryFilter("All");
+                setLogsLimit(50);
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+          {shownEntries.length ? (
+            <>
+              <div className="table-wrap log-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>DATE &amp; TIME</th>
+                      <th>TYPE</th>
+                      <th>TRANSACTION</th>
+                      <th>USER</th>
+                      <th>RECORD</th>
+                      <th>DETAILS</th>
+                      <th>SOURCE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shownEntries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{dateTimeLabel(entry.createdAt)}</td>
+                        <td>
+                          <StatusBadge
+                            label={entry.category}
+                            tone={
+                              entry.category === "Payments"
+                                ? "success"
+                                : entry.category === "Rules"
+                                  ? "warning"
+                                  : "info"
+                            }
+                          />
+                        </td>
+                        <td>{entry.action}</td>
+                        <td>{entry.actor}</td>
+                        <td>{entry.item}</td>
+                        <td className="log-details" title={entry.details}>
+                          {entry.details || "—"}
+                        </td>
+                        <td>
+                          <span
+                            className={`log-source ${entry.source === "Audit log" ? "log-source-audit" : ""}`}
+                          >
+                            {entry.source}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {filteredEntries.length > shownEntries.length && (
+                <button
+                  className="button button-secondary log-more"
+                  onClick={() => setLogsLimit((limit) => limit + 50)}
+                >
+                  Show 50 more
+                </button>
+              )}
+              <p className="log-note">
+                Transaction records reconstructed from existing library data
+                are marked “Transaction record.” Their original actor may not
+                have been saved.
+              </p>
+            </>
+          ) : (
+            <EmptyState
+              text={
+                query || auditFrom || auditTo || logCategoryFilter !== "All"
+                  ? "No transactions match these filters."
+                  : "No transactions have been recorded yet."
+              }
+            />
+          )}
+        </section>
+      </div>
+    );
   }
 
   function renderStaff() {
@@ -2461,8 +2983,8 @@ export default function Home() {
         return renderSuppliers();
       case "Reports":
         return renderReports();
-      case "Audit":
-        return renderAudit();
+      case "Logs":
+        return renderLogs();
       case "Profile":
         return renderProfile();
       case "Staff":

@@ -327,6 +327,14 @@ export async function registerPrototype(input: {
     members: existingMember
       ? state.members.map((item) => item.id === existingMember.id ? member : item)
       : [...state.members, member],
+    auditLog: [{
+      id: `AUD-${window.crypto.randomUUID()}`,
+      actor: email,
+      action: "Registered customer account",
+      item: email,
+      after: `Customer · Membership ${member.membershipStatus}`,
+      createdAt: new Date().toISOString(),
+    }, ...(state.auditLog ?? [])],
   });
 
   const user = await createStoredUser(

@@ -710,6 +710,88 @@ a:focus-visible {
   font-size: 9px;
   line-height: 1.5;
 }
+.log-category-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+  margin: 2px 0 17px;
+}
+.log-category-card {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfaf8;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.log-category-card:hover,
+.log-category-card.selected {
+  border-color: #9aa9bf;
+  background: #f1f4f8;
+}
+.log-category-card strong {
+  color: var(--navy);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 21px;
+  line-height: 1;
+}
+.log-category-card span {
+  color: #727e8f;
+  font-size: 10px;
+  font-weight: 700;
+}
+.log-filters {
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(115px, 0.7fr)) auto;
+}
+.log-table-wrap {
+  max-height: min(62vh, 680px);
+  overflow: auto;
+}
+.log-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f7f8fa;
+}
+.log-table-wrap td {
+  vertical-align: top;
+}
+.log-table-wrap td:first-child {
+  min-width: 130px;
+  white-space: nowrap;
+}
+.log-details {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.log-source {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 12px;
+  background: #f4f1ea;
+  color: #78694f;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.log-source-audit {
+  background: #edf5ef;
+  color: #4b7659;
+}
+.log-more {
+  margin-top: 13px;
+}
+.log-note {
+  margin: 12px 0 0;
+  color: #727e8f;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .text-button,
 .back-link {
   padding: 5px;
@@ -2019,6 +2101,12 @@ tbody tr:hover {
   .manager-action-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .log-category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .log-filters {
+    grid-template-columns: 1fr 1fr;
+  }
   .sidebar {
     width: 205px;
     padding-right: 14px;
@@ -2067,6 +2155,13 @@ tbody tr:hover {
 @media (max-width: 650px) {
   .manager-action-grid {
     grid-template-columns: 1fr;
+  }
+  .log-category-grid,
+  .log-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .log-filters > label:first-child {
+    grid-column: 1 / -1;
   }
   .auth-screen {
     min-height: 100dvh;

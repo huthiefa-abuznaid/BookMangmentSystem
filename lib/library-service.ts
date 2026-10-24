@@ -835,7 +835,7 @@ export function executeLibraryAction(
         state = {
           ...state,
           books: state.books.map((itemBook) => itemBook.id === book.id ? changeStockLocation(itemBook, -item.quantity, "Library floor") : itemBook),
-          movements: createMovement(state, book.id, "Book sale", before, after, "Sale", role),
+          movements: createMovement(state, book.id, "Book sale", before, after, "Sale", actor),
         };
       }
       const sale: Sale = {
@@ -849,7 +849,14 @@ export function executeLibraryAction(
         createdAt: new Date().toISOString(),
       };
       next = { ...state, sales: [sale, ...(state.sales ?? [])] };
-      next = audit(next, actor, "Recorded sale", sale.id, undefined, moneyValue(total));
+      next = audit(
+        next,
+        actor,
+        "Recorded sale",
+        sale.id,
+        undefined,
+        `${items.map((item) => `${getBook(next, item.bookId).title} × ${item.quantity}`).join(", ")} · ${sale.paymentMethod} · ${sale.paymentStatus} · ${moneyValue(total)}`,
+      );
       return next;
     }
     case "updateOrder": {
@@ -886,11 +893,18 @@ export function executeLibraryAction(
           next = {
             ...next,
             books: next.books.map((entry) => entry.id === book.id ? changeStockLocation(entry, item.quantity, "Library floor") : entry),
-            movements: createMovement(next, book.id, "Order cancelled", before, after, `Refund order ${sale.id}`, role),
+            movements: createMovement(next, book.id, "Order cancelled", before, after, `Refund order ${sale.id}`, actor),
           };
         }
       }
-      state = audit(next, actor, `Order ${action.status.toLowerCase()}`, sale.id);
+      state = audit(
+        next,
+        actor,
+        `Order ${action.status.toLowerCase()}`,
+        sale.id,
+        sale.status,
+        `${action.status} · ${sale.paymentMethod} · ${action.status === "Collected" ? `Cash received ${moneyValue(sale.total)}` : sale.paymentStatus}`,
+      );
       return state;
     }
     case "collectFinePayment": {
@@ -905,7 +919,14 @@ export function executeLibraryAction(
           ? { ...item, unpaidFines: Math.max(0, Number((item.unpaidFines - action.amount).toFixed(2))) }
           : item),
       };
-      return audit(next, actor, "Collected cash fine payment", member.name, moneyValue(member.unpaidFines), moneyValue(Math.max(0, member.unpaidFines - action.amount)));
+      return audit(
+        next,
+        actor,
+        "Collected cash fine payment",
+        member.name,
+        moneyValue(member.unpaidFines),
+        `Cash received ${moneyValue(action.amount)} · Balance ${moneyValue(Math.max(0, member.unpaidFines - action.amount))}`,
+      );
     }
     case "adjustFine": {
       requireRole(role, ["Manager"]);
